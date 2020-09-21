@@ -4,6 +4,11 @@ Sub loopThruWorksheets()
     Dim wbk As Workbook
     Dim wks As Worksheet
     Dim sample As String
+    Dim startTime As Double
+    Dim secondsRan As Double
+    '---source for determining time run: https://www.thespreadsheetguru.com/the-code-vault/2015/1/28/vba-calculate-macro-run-time
+    
+    startTime = Timer
     
     'set wbk variable as the current open workbook (excel file)
     Set wbk = ThisWorkbook
@@ -15,8 +20,13 @@ Sub loopThruWorksheets()
         
         'call StockTicker subroutine to execute summary of data
         Call StockTicker
-        
+    
     Next wks
+    
+    secondsRan = Timer - startTime
+    
+    MsgBox ("Updated All Sheets in " & Round(secondsRan, 2) & " seconds")
+    
 End Sub
 
 Sub StockTicker()
@@ -30,6 +40,9 @@ Sub StockTicker()
     Dim stVol As Double 'used to store stock volume
     Dim yrChange As Double 'used to store yearly change
     Dim pctChange As Double 'used to store percent change
+    Dim rowOpen, rowClose, rowVol As Double
+    
+    '----Challenge Variables---
     Dim gtIncTicker As String
     Dim gtDecTicker As String
     Dim gtTotVolTicker As String
@@ -38,39 +51,25 @@ Sub StockTicker()
     Dim gtTotVol As Double
     
     
+    
     '-------Assumptions----
     '      Data is correctly sorted by Ticker & Date (Jan -> Dec)
     '      Only one year of data per sheet
-    '     if assumptions are incorrect - add sort by ticker & date prior to looping
+    '      If the opening stock value for a given stock ticker is 0, continue until first non-zero opening value
+    '       if there is no non-zero opening value, percentage change = 0
     
     '-----Definitions-----
     '      Yearly Change = Closing Price (end of year) - Opening Price (beginning of year)
     '      Percentage Change = Yearly Change / Opening Price (beginning of year)
     '      Total Stock Volume = sum of all stock volume per ticker
     
-    '-----Questions from Rubric----
-    '     Why do I have to read/store the open and close price of each row if I don't need it?
-    '     Why do I have to store the volume of stock for each row if I don't need to store it for use?
-    '     What to do when Opening Price is ZERO when calculating yearly change?
-    '     The summary of the tickers,is this an over all? or a per sheet basis?
-    '     Challenge values - per sheet or full worksheet?
     
-    'clear any existing data
-    Range("I:Q").Value = ""
-    Range("I:Q").Interior.ColorIndex = 0
+    'delete columns I through Q to remove any existing data
+    Columns("I:Q").Select
+    Selection.Delete Shift:=xlToLeft
+    Range("I1").Select
 
-    'Create Headers
-    Range("I1").Value = "Ticker"
-    Range("J1").Value = "Yearly Change"
-    Range("K1").Value = "Percent Change"
-    Range("L1").Value = "Total Stock Volume"
-    
-            'Set Challenge Titles
-            Range("O2").Value = "Greatest % Increase"
-            Range("O3").Value = "Greatest % Decrease"
-            Range("O4").Value = "Greatest Total Volume"
-            Range("P1").Value = "Ticker"
-            Range("Q1").Value = "Value"
+    Call writeHeaders
         
     'determine last row of data
     lastRow = Cells(1, 1).End(xlDown).row
@@ -78,26 +77,35 @@ Sub StockTicker()
     'initialize variables
     printRow = 2
     stVol = 0
-    stOpen = Cells(2, 3).Value
+    stOpen = 0
             '---for challenge
             gtInc = 0
             gtDec = 0
             gtTotVol = 0
     
     'loop through every row on the sheet
-    For row = 2 To lastRow 'replace with lastRow (1049 is through AAN ticker)
+    For row = 2 To lastRow
         currentTicker = Cells(row, 1).Value     'store current row ticker
         nextTicker = Cells(row + 1, 1).Value   'store next row ticker
-        stVol = stVol + Cells(row, 7).Value      'add ticker volume to sum
+        rowVol = Cells(row, 7).Value
+        rowOpen = Cells(row, 3).Value
+        rowClose = Cells(row, 6).Value
         
-        'compare if currentTicker & nextTicker are the same
+        stVol = stVol + rowVol   'row volume to sum
+        
+        'set the stock open price to the first non-zero opening value
+        If rowOpen <> 0 And stOpen = 0 Then
+            stOpen = rowOpen
+        End If
+        
+        'compare if currentTicker & nextTicker - if they are not equal, summarize the data
         If currentTicker <> nextTicker Then
             '-----Print & Format Summary Data---
             'Enter Ticker Name
             Cells(printRow, 9).Value = currentTicker
             
             'Calculate and display yearly change
-            stClose = Cells(row, 6).Value
+            stClose = rowClose
             
             yrChange = stClose - stOpen
             Cells(printRow, 10).Value = yrChange
@@ -111,13 +119,15 @@ Sub StockTicker()
             End If
                
             'calculate and display percentage change
-                'checking for openSt = 0???
+                'if stOpen = 0, then set percent change equal to zero
+                'in example file PLNT has all zero value
             If stOpen = 0 Then
                  pctChange = 0
             Else
-                pctChange = Round(yrChange / stOpen, 5)
+                pctChange = yrChange / stOpen
             End If
             
+            'display percent change
             Cells(printRow, 11).Value = pctChange
             
             'display total stock volume
@@ -144,7 +154,7 @@ Sub StockTicker()
             
                 '|----End Challenge ---------
             '----Reset Stored Values----
-            stOpen = Cells(row + 1, 3)
+            stOpen = 0
             stVol = 0
             yrChange = 0
             stClose = 0
@@ -157,12 +167,13 @@ Sub StockTicker()
     Next row
     
     
+    
+    '------Update Format-------
+    'Set Column K (Percent Change) to Number Format Percent, with 2 decimals
+    Range("K:K").Style = "Percent"
+    Range("K:K").NumberFormat = "0.00%"
+    
                 '----Print Challenge Values-----
-                'Set Challenge Titles
-                Range("O2").Value = "Greatest % Increase"
-                Range("O3").Value = "Greatest % Decrease"
-                Range("O4").Value = "Greatest Total Volume"
-                
                 Range("P2").Value = gtIncTicker
                 Range("Q2").Value = gtInc
                 
@@ -175,19 +186,24 @@ Sub StockTicker()
                 'Format Challenge section
                 Range("Q2:Q3").Style = "Percent"
                 Range("Q2:Q3").NumberFormat = "0.00%"
-                Range("Q4").NumberFormat = "0.00E+00"
+                Range("Q4").NumberFormat = "0.0000E+00"
     
-                'Autofit Column Width of columns I, J, K, and L
-                Range("O:Q").EntireColumn.AutoFit
-                            
-    
-    '------Update Format-------
-    'Set Column K (Percent Change) to Number Format Percent, with 2 decimals
-    Range("K:K").Style = "Percent"
-    Range("K:K").NumberFormat = "0.00%"
-    
-    'Autofit Column Width of columns I, J, K, and L
-    Range("I:L").EntireColumn.AutoFit
+    'Autofit Column Width of columns I through Q
+    Range("I:Q").EntireColumn.AutoFit
 
+End Sub
 
+Sub writeHeaders()
+    'Create Headers
+    Range("I1").Value = "Ticker"
+    Range("J1").Value = "Yearly Change"
+    Range("K1").Value = "Percent Change"
+    Range("L1").Value = "Total Stock Volume"
+    
+            'Set Challenge Titles
+            Range("O2").Value = "Greatest % Increase"
+            Range("O3").Value = "Greatest % Decrease"
+            Range("O4").Value = "Greatest Total Volume"
+            Range("P1").Value = "Ticker"
+            Range("Q1").Value = "Value"
 End Sub
